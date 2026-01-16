@@ -219,7 +219,7 @@ function App() {
     
     try {
       // Send data to Node Backend
-      await axios.post('/api/submit', {
+      await axios.post('https://assessor-form-roleplay-backend.onrender.com/api/submit', {
         participant: selectedParticipant,
         scores: scores,
         comments: comments
