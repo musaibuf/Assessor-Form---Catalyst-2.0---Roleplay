@@ -1,0 +1,471 @@
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import {
+  Container,
+  Typography,
+  TextField,
+  Button,
+  Card,
+  CardContent,
+  Box,
+  Paper,
+  Radio,
+  RadioGroup,
+  FormControlLabel,
+  FormControl,
+  FormLabel,
+  Divider,
+  Alert,
+  CircularProgress,
+  createTheme,
+  ThemeProvider,
+  CssBaseline
+} from '@mui/material';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+
+// --- Theme Configuration (Carnelian Orange/Yellow Branding) ---
+const theme = createTheme({
+  palette: {
+    primary: {
+      main: '#F57C00', // Carnelian Orange/Yellow
+      light: '#FF9800',
+      dark: '#E65100',
+      contrastText: '#ffffff', // White text on orange buttons
+    },
+    secondary: {
+      main: '#1F2937', // Dark Charcoal
+    },
+    background: {
+      default: '#F3F4F6', // Light Grey Background
+      paper: '#ffffff',
+    },
+  },
+  typography: {
+    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+    h5: { fontWeight: 600, color: '#E65100' }, // Darker orange for headings
+    h4: { fontWeight: 700 },
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: { 
+          borderRadius: 8, 
+          paddingTop: 12, 
+          paddingBottom: 12, 
+          fontWeight: 'bold',
+          boxShadow: '0 4px 6px rgba(245, 124, 0, 0.25)' // Orange shadow
+        },
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: { borderRadius: 16, boxShadow: '0 10px 30px rgba(0,0,0,0.08)' },
+      },
+    },
+    MuiPaper: {
+      styleOverrides: {
+        root: { borderRadius: 16 },
+      },
+    },
+    MuiRadio: {
+      styleOverrides: {
+        root: {
+          color: '#F57C00', // Orange radio buttons
+          '&.Mui-checked': {
+            color: '#E65100',
+          },
+        },
+      },
+    },
+  },
+});
+
+// --- Data Configuration ---
+const COGNITIVE_BEHAVIORS = [
+  "Problem Solving",
+  "Asking the Right Questions",
+  "Listening Skills",
+  "Decision-Making Skills",
+  "Strategic Sales & Marketing Approach",
+  "Social Media"
+];
+
+const INTERPERSONAL_BEHAVIORS = [
+  "Communication Skills",
+  "Building a Positive Environment",
+  "Organization Skills & Team Management"
+];
+
+function App() {
+  // --- State ---
+  const [csvData, setCsvData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [step, setStep] = useState(0); // 0=Search, 1=Confirm, 2=Form, 3=Success
+  
+  // Inputs
+  const [cnicInput, setCnicInput] = useState('');
+  const [selectedParticipant, setSelectedParticipant] = useState(null);
+  const [scores, setScores] = useState({});
+  const [comments, setComments] = useState({ cognitive: '', interpersonal: '' });
+  
+  // Validation & Submission State
+  const [formError, setFormError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false); // NEW: Loading state for API
+
+  // --- 1. Load CSV ---
+  useEffect(() => {
+    const fetchCSV = async () => {
+      try {
+        const response = await axios.get('/data/participant.csv');
+        const parsedData = parseCSV(response.data);
+        
+        if (parsedData.length === 0) {
+          throw new Error("CSV file appears empty or could not be parsed.");
+        }
+
+        setCsvData(parsedData);
+        setLoading(false);
+      } catch (err) {
+        console.error("Error loading CSV:", err);
+        setError("Failed to load database. Check console (F12) for details.");
+        setLoading(false);
+      }
+    };
+    fetchCSV();
+  }, []);
+
+  // --- Helper: Robust CSV Parser ---
+  const parseCSV = (text) => {
+    const lines = text.trim().split(/\r\n|\n/);
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]+/g, ''));
+    const result = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+      const obj = {};
+      headers.forEach((header, index) => {
+        let val = row[index] ? row[index].trim() : '';
+        if (val.startsWith('"') && val.endsWith('"')) {
+          val = val.slice(1, -1);
+        }
+        obj[header] = val;
+      });
+      result.push(obj);
+    }
+    return result;
+  };
+
+  // --- Handlers ---
+
+  const handleCnicChange = (e) => {
+    let val = e.target.value.replace(/\D/g, ''); 
+    if (val.length > 13) val = val.slice(0, 13); 
+    if (val.length > 5 && val.length <= 12) {
+      val = `${val.slice(0, 5)}-${val.slice(5)}`;
+    } else if (val.length > 12) {
+      val = `${val.slice(0, 5)}-${val.slice(5, 12)}-${val.slice(12)}`;
+    }
+    setCnicInput(val);
+  };
+
+  const handleSearch = () => {
+    setError('');
+    const cnicRegex = /^\d{5}-\d{7}-\d{1}$/;
+    if (!cnicRegex.test(cnicInput)) {
+      setError('Invalid Format. Required: xxxxx-xxxxxxx-x');
+      return;
+    }
+    const found = csvData.find(p => p.cnic === cnicInput);
+    if (found) {
+      setSelectedParticipant(found);
+      setStep(1); 
+    } else {
+      setError('CNIC not found in database.');
+      setSelectedParticipant(null);
+    }
+  };
+
+  const handleScoreChange = (behavior, value) => {
+    setScores(prev => ({ ...prev, [behavior]: value }));
+    if (formError) setFormError('');
+  };
+
+  const handleCommentChange = (section, value) => {
+    setComments(prev => ({ ...prev, [section]: value }));
+    if (formError) setFormError('');
+  };
+
+  // --- UPDATED SUBMIT HANDLER ---
+  const handleSubmit = async () => {
+    // 1. Validation
+    const allBehaviors = [...COGNITIVE_BEHAVIORS, ...INTERPERSONAL_BEHAVIORS];
+    
+    const missingScores = allBehaviors.filter(b => !scores[b]);
+    if (missingScores.length > 0) {
+      setFormError(`Please grade all behaviors. Missing: ${missingScores.length}`);
+      window.scrollTo(0, 0);
+      return;
+    }
+
+    if (!comments.cognitive.trim() || !comments.interpersonal.trim()) {
+      setFormError("Comments are mandatory for both sections.");
+      return;
+    }
+
+    // 2. Submission to Backend
+    setIsSubmitting(true); // Start loading spinner/text
+    
+    try {
+      // Send data to Node Backend
+      await axios.post('/api/submit', {
+        participant: selectedParticipant,
+        scores: scores,
+        comments: comments
+      });
+
+      console.log("Saved to Google Sheets successfully");
+      setStep(3); // Move to Success Screen
+    } catch (err) {
+      console.error("Error submitting form:", err);
+      setFormError("Failed to save data. Please check your internet connection or contact support.");
+      window.scrollTo(0, 0);
+    } finally {
+      setIsSubmitting(false); // Stop loading
+    }
+  };
+
+  const resetForm = () => {
+    setStep(0);
+    setCnicInput('');
+    setSelectedParticipant(null);
+    setScores({});
+    setComments({ cognitive: '', interpersonal: '' });
+    setFormError('');
+  };
+
+  // --- Components ---
+
+  const LogoHeader = () => (
+    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
+      <img src="/logo.png" alt="Carnelian Logo" style={{ maxHeight: '80px', objectFit: 'contain' }} />
+    </Box>
+  );
+
+  // Step 0: Search
+  const renderSearch = () => (
+    <Card sx={{ maxWidth: 500, mx: 'auto', mt: 10, p: 3 }}>
+      <CardContent>
+        <LogoHeader />
+        <Typography variant="h5" gutterBottom align="center" sx={{ mb: 3 }}>
+          Roleplay Assessor Portal
+        </Typography>
+        
+        <Box sx={{ mt: 2 }}>
+          <TextField
+            fullWidth
+            label="Enter Participant CNIC"
+            variant="outlined"
+            value={cnicInput}
+            onChange={handleCnicChange}
+            placeholder="xxxxx-xxxxxxx-x"
+            helperText="Format: xxxxx-xxxxxxx-x" 
+            InputProps={{ style: { fontSize: '1.2rem', letterSpacing: '2px' } }}
+          />
+        </Box>
+        
+        {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
+        
+        <Button 
+          fullWidth 
+          variant="contained" 
+          size="large" 
+          sx={{ mt: 4 }} 
+          onClick={handleSearch}
+          disabled={loading}
+        >
+          Search
+        </Button>
+      </CardContent>
+    </Card>
+  );
+
+  // Step 1: Confirm
+  const renderConfirm = () => (
+    <Card sx={{ maxWidth: 600, mx: 'auto', mt: 10, p: 3 }}>
+      <CardContent>
+        <LogoHeader />
+        <Typography variant="h5" gutterBottom align="center">Participant Verification</Typography>
+        <Divider sx={{ my: 2, borderColor: '#F57C00' }} />
+        
+        <Box sx={{ display: 'grid', gap: 1.5 }}>
+          <Typography variant="body1" sx={{ fontSize: '1.1rem' }}><strong>Name:</strong> {selectedParticipant.name}</Typography>
+          <Typography variant="body1" sx={{ fontSize: '1.1rem' }}><strong>CNIC:</strong> {selectedParticipant.cnic}</Typography>
+          <Typography variant="body1" sx={{ fontSize: '1.1rem' }}><strong>Dealership:</strong> {selectedParticipant.dealership}</Typography>
+          <Typography variant="body1" sx={{ fontSize: '1.1rem' }}><strong>Region:</strong> {selectedParticipant.region}</Typography>
+        </Box>
+
+        <Box sx={{ mt: 4, display: 'flex', gap: 2 }}>
+          <Button variant="outlined" color="secondary" fullWidth onClick={() => setStep(0)}>Cancel</Button>
+          <Button variant="contained" fullWidth onClick={() => setStep(2)}>Proceed</Button>
+        </Box>
+      </CardContent>
+    </Card>
+  );
+
+  // Step 2: Form
+  const renderForm = () => (
+    <Paper sx={{ maxWidth: 900, mx: 'auto', mt: 4, p: 4, mb: 10 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <img src="/logo.png" alt="Logo" style={{ height: '50px' }} />
+        <Box sx={{ textAlign: 'right' }}>
+          <Typography variant="caption" display="block" color="textSecondary">ASSESSING</Typography>
+          <Typography variant="h6" color="primary">{selectedParticipant.name}</Typography>
+        </Box>
+      </Box>
+      <Divider sx={{ mb: 4 }} />
+
+      {formError && (
+        <Alert severity="error" sx={{ mb: 3, fontSize: '1rem' }} variant="filled">
+          {formError}
+        </Alert>
+      )}
+
+      {/* Cognitive */}
+      <Box sx={{ backgroundColor: '#FFF3E0', p: 2, borderRadius: 2, borderLeft: '6px solid #F57C00' }}>
+        <Typography variant="h6" color="primary">1. Cognitive Skills (C)</Typography>
+      </Box>
+      {COGNITIVE_BEHAVIORS.map((behavior, index) => (
+        <Box key={index} sx={{ mt: 3, mb: 2, pl: 2 }}>
+          <FormControl component="fieldset" fullWidth error={formError && !scores[behavior]}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
+              <FormLabel component="legend" sx={{ color: '#333', fontWeight: '500', fontSize: '1rem', flex: 1, minWidth: '200px' }}>
+                {behavior} <span style={{color: 'red'}}>*</span>
+              </FormLabel>
+              <RadioGroup row name={behavior} value={scores[behavior] || ''} onChange={(e) => handleScoreChange(behavior, e.target.value)} sx={{ flexShrink: 0 }}>
+                {[1, 2, 3, 4].map((val) => (
+                  <FormControlLabel key={val} value={val.toString()} control={<Radio />} label={val.toString()} labelPlacement="bottom" sx={{ mx: 1.5 }} />
+                ))}
+              </RadioGroup>
+            </Box>
+          </FormControl>
+          <Divider sx={{ mt: 1, opacity: 0.6 }} />
+        </Box>
+      ))}
+      <TextField 
+        fullWidth 
+        multiline 
+        rows={3} 
+        label="Comments for Cognitive Skills" 
+        variant="outlined" 
+        required
+        error={formError && !comments.cognitive.trim()}
+        sx={{ mt: 2, mb: 5 }} 
+        value={comments.cognitive} 
+        onChange={(e) => handleCommentChange('cognitive', e.target.value)} 
+      />
+
+      {/* Interpersonal */}
+      <Box sx={{ backgroundColor: '#FFF3E0', p: 2, borderRadius: 2, borderLeft: '6px solid #F57C00' }}>
+        <Typography variant="h6" color="primary">2. Interpersonal Skills (I)</Typography>
+      </Box>
+      {INTERPERSONAL_BEHAVIORS.map((behavior, index) => (
+        <Box key={index} sx={{ mt: 3, mb: 2, pl: 2 }}>
+          <FormControl component="fieldset" fullWidth error={formError && !scores[behavior]}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
+              <FormLabel component="legend" sx={{ color: '#333', fontWeight: '500', fontSize: '1rem', flex: 1, minWidth: '200px' }}>
+                {behavior} <span style={{color: 'red'}}>*</span>
+              </FormLabel>
+              <RadioGroup row name={behavior} value={scores[behavior] || ''} onChange={(e) => handleScoreChange(behavior, e.target.value)} sx={{ flexShrink: 0 }}>
+                {[1, 2, 3, 4].map((val) => (
+                  <FormControlLabel key={val} value={val.toString()} control={<Radio />} label={val.toString()} labelPlacement="bottom" sx={{ mx: 1.5 }} />
+                ))}
+              </RadioGroup>
+            </Box>
+          </FormControl>
+          <Divider sx={{ mt: 1, opacity: 0.6 }} />
+        </Box>
+      ))}
+      <TextField 
+        fullWidth 
+        multiline 
+        rows={3} 
+        label="Comments for Interpersonal Skills" 
+        variant="outlined" 
+        required
+        error={formError && !comments.interpersonal.trim()}
+        sx={{ mt: 2, mb: 4 }} 
+        value={comments.interpersonal} 
+        onChange={(e) => handleCommentChange('interpersonal', e.target.value)} 
+      />
+
+      {formError && (
+        <Typography color="error" align="center" sx={{ mb: 2, fontWeight: 'bold' }}>
+          {formError}
+        </Typography>
+      )}
+
+      <Button 
+        variant="contained" 
+        color="primary" 
+        size="large" 
+        fullWidth 
+        onClick={handleSubmit}
+        disabled={isSubmitting} // Disable button while saving
+        sx={{ py: 2, fontSize: '1.2rem', boxShadow: 3 }}
+      >
+        {isSubmitting ? "Saving..." : "Submit Assessment"}
+      </Button>
+    </Paper>
+  );
+
+  // Step 3: Success (No Logo)
+  const renderSuccess = () => (
+    <Card sx={{ maxWidth: 500, mx: 'auto', mt: 15, p: 4, textAlign: 'center' }}>
+      <CardContent>
+        {/* Logo Removed Here */}
+        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+          <CheckCircleOutlineIcon sx={{ fontSize: 80, color: '#F57C00' }} />
+        </Box>
+        <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#1F2937' }}>
+          Thank You!
+        </Typography>
+        <Typography variant="h6" sx={{ color: '#E65100', mb: 4 }}>
+          Your response has been recorded.
+        </Typography>
+        <Button 
+          variant="contained" 
+          size="large" 
+          fullWidth 
+          onClick={resetForm}
+          sx={{ borderRadius: 2, py: 1.5, fontSize: '1.1rem' }}
+        >
+          Assess Another Participant
+        </Button>
+      </CardContent>
+    </Card>
+  );
+
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <div style={{ minHeight: '100vh', paddingBottom: '20px' }}>
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 20 }}>
+            <CircularProgress color="primary" size={60} />
+          </Box>
+        ) : (
+          <>
+            {step === 0 && renderSearch()}
+            {step === 1 && renderConfirm()}
+            {step === 2 && renderForm()}
+            {step === 3 && renderSuccess()}
+          </>
+        )}
+      </div>
+    </ThemeProvider>
+  );
+}
+
+export default App;
