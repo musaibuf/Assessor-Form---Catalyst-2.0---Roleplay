@@ -7,7 +7,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors()); // Allows the frontend to talk to this backend from a different URL
+app.use(cors());
 app.use(express.json());
 
 // --- Google Sheets Auth ---
@@ -31,18 +31,31 @@ app.get('/', (req, res) => {
 });
 
 app.post('/api/submit', async (req, res) => {
-    const { participant, scores, comments } = req.body;
+    // Destructure assessorName from body
+    const { assessorName, participant, scores, comments } = req.body;
 
     try {
         const client = await auth.getClient();
         const googleSheets = google.sheets({ version: 'v4', auth: client });
         const spreadsheetId = process.env.SPREADSHEET_ID;
 
+        // --- UPDATED COLUMN ORDER ---
+        // 1. Assessor Name
+        // 2. Participant Name
+        // 3. Participant CNIC
+        // 4. Region
+        // 5. Dealership Name
+        // 6-11. Cognitive Scores
+        // 12. Cognitive Comments
+        // 13-15. Interpersonal Scores
+        // 16. Interpersonal Comments
+        
         const rowData = [
+            assessorName || "Unknown",
             participant.name,
             participant.cnic,
-            participant.dealership,
             participant.region,
+            participant.dealership,
             scores["Problem Solving"] || "",
             scores["Asking the Right Questions"] || "",
             scores["Listening Skills"] || "",
@@ -59,7 +72,7 @@ app.post('/api/submit', async (req, res) => {
         await googleSheets.spreadsheets.values.append({
             auth,
             spreadsheetId,
-            range: "Sheet1!A:O",
+            range: "Sheet1!A:P", // Adjusted range to cover all columns
             valueInputOption: "USER_ENTERED",
             resource: { values: [rowData] },
         });

@@ -27,17 +27,17 @@ import {
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 
-// --- Theme Configuration (Carnelian Orange/Yellow Branding) ---
+// --- Theme Configuration ---
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#F57C00', // Carnelian Orange/Yellow
+      main: '#F57C00',
       light: '#FF9800',
       dark: '#E65100',
       contrastText: '#ffffff',
     },
     secondary: {
-      main: '#1F2937', // Dark Charcoal
+      main: '#1F2937',
     },
     background: {
       default: '#F3F4F6',
@@ -71,16 +71,6 @@ const theme = createTheme({
         root: { borderRadius: 16 },
       },
     },
-    MuiRadio: {
-      styleOverrides: {
-        root: {
-          color: '#F57C00',
-          '&.Mui-checked': {
-            color: '#E65100',
-          },
-        },
-      },
-    },
   },
 });
 
@@ -108,11 +98,11 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
-  // Steps: 0=Search, 1=Confirm(CSV), 2=Form, 3=Success, 4=ManualEntry
   const [step, setStep] = useState(0); 
   
   // Inputs
   const [cnicInput, setCnicInput] = useState('');
+  const [assessorName, setAssessorName] = useState(''); // <--- NEW STATE
   const [selectedParticipant, setSelectedParticipant] = useState(null);
   const [scores, setScores] = useState({});
   const [comments, setComments] = useState({ cognitive: '', interpersonal: '' });
@@ -125,7 +115,6 @@ function App() {
     region: ''
   });
   
-  // Validation & Submission State
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -146,7 +135,6 @@ function App() {
     fetchCSV();
   }, []);
 
-  // --- Helper: CSV Parser ---
   const parseCSV = (text) => {
     const lines = text.trim().split(/\r\n|\n/);
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]+/g, ''));
@@ -168,8 +156,6 @@ function App() {
   };
 
   // --- Handlers ---
-
-  // CNIC Formatter
   const formatCNIC = (val) => {
     val = val.replace(/\D/g, ''); 
     if (val.length > 13) val = val.slice(0, 13); 
@@ -213,8 +199,8 @@ function App() {
   const submitManualEntry = () => {
     const { name, cnic, dealership, region } = manualForm;
     
-    if (!name || !dealership || !region) {
-      setError("Please fill in all fields.");
+    if (!name || !dealership || !region || !assessorName.trim()) { // Check Assessor Name
+      setError("Please fill in all fields, including Assessor Name.");
       return;
     }
     
@@ -224,7 +210,6 @@ function App() {
       return;
     }
 
-    // Create participant object and move to assessment
     setSelectedParticipant({
       name,
       cnic,
@@ -232,7 +217,7 @@ function App() {
       region
     });
     setError('');
-    setStep(2); // Go to Assessment Form
+    setStep(2); 
   };
 
   // --- Assessment Handlers ---
@@ -264,8 +249,8 @@ function App() {
     setIsSubmitting(true);
     
     try {
-      // Replace with your actual backend URL
       await axios.post('https://assessor-form-roleplay-backend.onrender.com/api/submit', {
+        assessorName: assessorName, // <--- SEND ASSESSOR NAME
         participant: selectedParticipant,
         scores: scores,
         comments: comments
@@ -284,6 +269,7 @@ function App() {
   const resetForm = () => {
     setStep(0);
     setCnicInput('');
+    setAssessorName(''); // Reset Assessor Name
     setSelectedParticipant(null);
     setScores({});
     setComments({ cognitive: '', interpersonal: '' });
@@ -360,6 +346,16 @@ function App() {
         <Divider sx={{ my: 2, borderColor: '#F57C00' }} />
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 2 }}>
+          {/* NEW: Assessor Name Field */}
+          <TextField
+            label="Assessor Name"
+            fullWidth
+            required
+            value={assessorName}
+            onChange={(e) => setAssessorName(e.target.value)}
+            sx={{ backgroundColor: '#FFF3E0' }}
+          />
+
           <TextField
             label="Full Name"
             fullWidth
@@ -419,16 +415,46 @@ function App() {
         <Typography variant="h5" gutterBottom align="center">Participant Verification</Typography>
         <Divider sx={{ my: 2, borderColor: '#F57C00' }} />
         
-        <Box sx={{ display: 'grid', gap: 1.5 }}>
+        <Box sx={{ display: 'grid', gap: 1.5, mb: 3 }}>
           <Typography variant="body1" sx={{ fontSize: '1.1rem' }}><strong>Name:</strong> {selectedParticipant.name}</Typography>
           <Typography variant="body1" sx={{ fontSize: '1.1rem' }}><strong>CNIC:</strong> {selectedParticipant.cnic}</Typography>
           <Typography variant="body1" sx={{ fontSize: '1.1rem' }}><strong>Dealership:</strong> {selectedParticipant.dealership}</Typography>
           <Typography variant="body1" sx={{ fontSize: '1.1rem' }}><strong>Region:</strong> {selectedParticipant.region}</Typography>
         </Box>
 
+        {/* NEW: Assessor Name Field */}
+        <Box sx={{ mt: 2, mb: 2 }}>
+            <TextField
+                label="Enter Assessor Name"
+                fullWidth
+                required
+                variant="filled"
+                value={assessorName}
+                onChange={(e) => {
+                    setAssessorName(e.target.value);
+                    setError('');
+                }}
+                sx={{ backgroundColor: '#FFF3E0' }}
+            />
+        </Box>
+
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
         <Box sx={{ mt: 4, display: 'flex', gap: 2 }}>
           <Button variant="outlined" color="secondary" fullWidth onClick={() => setStep(0)}>Cancel</Button>
-          <Button variant="contained" fullWidth onClick={() => setStep(2)}>Proceed</Button>
+          <Button 
+            variant="contained" 
+            fullWidth 
+            onClick={() => {
+                if(!assessorName.trim()) {
+                    setError("Please enter Assessor Name to proceed.");
+                    return;
+                }
+                setStep(2);
+            }}
+          >
+            Proceed
+          </Button>
         </Box>
       </CardContent>
     </Card>
@@ -440,7 +466,7 @@ function App() {
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <img src="/logo.png" alt="Logo" style={{ height: '50px' }} />
         <Box sx={{ textAlign: 'right' }}>
-          <Typography variant="caption" display="block" color="textSecondary">ASSESSING</Typography>
+          <Typography variant="caption" display="block" color="textSecondary">ASSESSOR: {assessorName}</Typography>
           <Typography variant="h6" color="primary">{selectedParticipant.name}</Typography>
         </Box>
       </Box>
